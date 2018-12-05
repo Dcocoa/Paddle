@@ -17,6 +17,7 @@ import unittest
 import numpy as np
 import copy
 from op_test import OpTest
+import paddle.fluid.core as core
 
 
 def iou(box_a, box_b):
@@ -133,7 +134,7 @@ def multiclass_nms(boxes, scores, background, score_threshold, nms_threshold,
 
 
 def batched_multiclass_nms(boxes, scores, background, score_threshold,
-                           nms_threshold, nms_top_k, keep_top_k):
+                           nms_threshold, nms_top_k, keep_top_k, sort_by_score):
     batch_size = scores.shape[0]
 
     det_outs = []
@@ -151,9 +152,15 @@ def batched_multiclass_nms(boxes, scores, background, score_threshold,
                 xmin, ymin, xmax, ymax = boxes[n][idx][:]
                 tmp_det_out.append(
                     [c, scores[n][c][idx], xmin, ymin, xmax, ymax])
-        sorted_det_out = sorted(
-            tmp_det_out, key=lambda tup: tup[0], reverse=False)
-        det_outs.extend(sorted_det_out)
+        if not sort_by_score:
+            # sort by label, CPU op kernel is sorted by label
+            sorted_det_out = sorted(
+                tmp_det_out, key=lambda tup: tup[0], reverse=False)
+            det_outs.extend(sorted_det_out)
+        else:
+            sorted_det_out = sorted(
+                tmp_det_out, key=lambda tup: tup[1], reverse=True)
+            det_outs.extend(sorted_det_out)
 
     return det_outs, lod
 
@@ -161,6 +168,7 @@ def batched_multiclass_nms(boxes, scores, background, score_threshold,
 class TestMulticlassNMSOp(OpTest):
     def set_argument(self):
         self.score_threshold = 0.01
+        self.sort_by_score = False
 
     def setUp(self):
         self.set_argument()
@@ -190,9 +198,9 @@ class TestMulticlassNMSOp(OpTest):
         boxes[:, :, 0:2] = boxes[:, :, 0:2] * 0.5
         boxes[:, :, 2:4] = boxes[:, :, 2:4] * 0.5 + 0.5
 
-        nmsed_outs, lod = batched_multiclass_nms(boxes, scores, background,
-                                                 score_threshold, nms_threshold,
-                                                 nms_top_k, keep_top_k)
+        nmsed_outs, lod = batched_multiclass_nms(
+            boxes, scores, background, score_threshold, nms_threshold,
+            nms_top_k, keep_top_k, self.sort_by_score)
         nmsed_outs = [-1] if not nmsed_outs else nmsed_outs
         nmsed_outs = np.array(nmsed_outs).astype('float32')
 
@@ -209,7 +217,21 @@ class TestMulticlassNMSOp(OpTest):
         }
 
     def test_check_output(self):
-        self.check_output()
+        place = core.CPUPlace()
+        self.check_output_with_place(place, 1e-6)
+
+
+class TestMulticlassNMSOpCUDA(TestMulticlassNMSOp):
+    def set_argument(self):
+        self.score_threshold = 0.01
+        self.sort_by_score = True
+
+    def test_check_output(self):
+        if core.is_compiled_with_cuda():
+            place = core.CUDAPlace(0)
+            self.check_output_with_place(place, 1e-6)
+        else:
+            pass
 
 
 class TestMulticlassNMSOpNoOutput(TestMulticlassNMSOp):
@@ -217,6 +239,11 @@ class TestMulticlassNMSOpNoOutput(TestMulticlassNMSOp):
         # Here set 2.0 to test the case there is no outputs.
         # In practical use, 0.0 < score_threshold < 1.0
         self.score_threshold = 2.0
+        self.sort_by_score = True  # or False
+
+    def test_check_output(self):
+        # test both CPU and CUDA
+        self.check_output()
 
 
 class TestIOU(unittest.TestCase):

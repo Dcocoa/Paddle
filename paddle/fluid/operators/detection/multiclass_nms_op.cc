@@ -64,10 +64,16 @@ class MultiClassNMSOp : public framework::OperatorWithKernel {
  protected:
   framework::OpKernelType GetExpectedKernelType(
       const framework::ExecutionContext& ctx) const override {
+    platform::Place place = ctx.GetPlace();
+    float nms_eta = ctx.Attr<float>("nms_eta");
+    auto* boxes = ctx.Input<Tensor>("BBoxes");
+    if (nms_eta < 1 || (boxes->dims()[2] != 4)) {
+      place = platform::CPUPlace();
+    }
     return framework::OpKernelType(
         framework::ToDataType(
             ctx.Input<framework::LoDTensor>("Scores")->type()),
-        platform::CPUPlace());
+        place);
   }
 };
 
