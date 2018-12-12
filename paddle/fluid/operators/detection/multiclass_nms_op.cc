@@ -67,7 +67,9 @@ class MultiClassNMSOp : public framework::OperatorWithKernel {
     platform::Place place = ctx.GetPlace();
     float nms_eta = ctx.Attr<float>("nms_eta");
     auto* boxes = ctx.Input<Tensor>("BBoxes");
-    if (nms_eta < 1 || (boxes->dims()[2] != 4)) {
+    const int kMaxSortNum = 1024 * 10;
+    if (nms_eta < 1 || (boxes->dims()[2] != 4) ||
+        (boxes->dims()[1] > kMaxSortNum)) {
       place = platform::CPUPlace();
     }
     return framework::OpKernelType(
