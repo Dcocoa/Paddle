@@ -276,13 +276,13 @@ headers = (
     list(find_files('*.h', '@PADDLE_SOURCE_DIR@/paddle/fluid/string')) +
     list(find_files('*.pb.h', '${PADDLE_BINARY_DIR}/paddle/fluid/framework')) +
     ['${EIGEN_INCLUDE_DIR}/Eigen/Core'] + # eigen
-    list(find_files('*', '${EIGEN_INCLUDE_DIR}/Eigen/src')) + # eigen
-    list(find_files('*', '${EIGEN_INCLUDE_DIR}/unsupported/Eigen')) + # eigen
-    list(find_files('*', '${GFLAGS_INSTALL_DIR}/include')) + # gflags
-    list(find_files('*', '${GLOG_INSTALL_DIR}/include')) + # glog
-    list(find_files('*', '${BOOST_INCLUDE_DIR}/boost')) + # boost
-    list(find_files('*', '${XXHASH_INSTALL_DIR}/include')) + # xxhash
-    list(find_files('*', '${PROTOBUF_INCLUDE_DIR}')) + # protobuf
+    ['${EIGEN_INCLUDE_DIR}/Eigen/src'] + # eigen
+    ['${EIGEN_INCLUDE_DIR}/unsupported/Eigen'] + # eigen
+    ['${GFLAGS_INSTALL_DIR}/include'] + # gflags
+    ['${GLOG_INSTALL_DIR}/include'] + # glog
+    ['${BOOST_INCLUDE_DIR}/boost'] + # boost
+    ['${XXHASH_INSTALL_DIR}/include'] + # xxhash
+    ['${PROTOBUF_INCLUDE_DIR}'] + # protobuf
     list(find_files('*.h', '${THREADPOOL_INCLUDE_DIR}'))) # threadpool
 
 
@@ -330,9 +330,16 @@ class InstallHeaders(Command):
             install_dir = re.sub('src/extern_eigen3/', '', install_dir)
             install_dir = re.sub('src/extern_boost/', '', install_dir)
         install_dir = os.path.join(self.install_dir, os.path.dirname(install_dir))
-        if not os.path.exists(install_dir):
+        if not os.path.isdir(header) and not os.path.exists(install_dir):
             self.mkpath(install_dir)
-        return self.copy_file(header, install_dir)
+
+        if os.path.isdir(header):
+            print(header, install_dir) 
+            return self.copy_tree(header, install_dir)
+
+        else:
+
+            return self.copy_file(header, install_dir)
   
     def run(self):
         if os.name == 'nt' or sys.platform == 'darwin':
